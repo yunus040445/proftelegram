@@ -1,10 +1,7 @@
-import random
 import re
+import random
 import asyncio
 from datetime import datetime, timedelta
-from threading import Thread
-from flask import Flask
-
 from telegram import Bot, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -13,17 +10,17 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
+from flask import Flask
+from threading import Thread
 
 # ---------------------
 # Ayarlar
 # ---------------------
-TOKEN = "8534122580:AAGRW6bWUnyHIYH7Xk1CvezfFOedmXp826g"
+TOKEN = "BOT_TOKENIN"  # Buraya kendi tokenını koy
 bot = Bot(token=TOKEN)
 
 emoji_sets = ["💸💯👑", "✨💵🎉", "💎🤑🔥", "💰💎💯"]
-
-# { user_id: {"name": str, "total": int} }
-daily_approvals = {}
+daily_approvals = {}  # {user_id: {"name": str, "total": int}}
 BLACKLIST = ["yat yok", "red", "onay yok", "yok"]
 
 # ---------------------
@@ -37,55 +34,59 @@ def home():
 Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
 
 # ---------------------
-# /start komutu
-# ---------------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    emojiler = random.choice(emoji_sets)
-    mesaj = f"<b>{emojiler} —GÜN SONU— {emojiler}</b>"
-    await update.message.reply_text(mesaj, parse_mode='HTML')
-
-# ---------------------
-# Admin kontrolü
+# Admin kontrol fonksiyonu
 # ---------------------
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    member = await context.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
+    member = await context.bot.get_chat_member(
+        update.effective_chat.id,
+        update.effective_user.id
+    )
     return member.status in ["administrator", "creator"]
 
 # ---------------------
-# Mesaj dinleyici: onay/iptal/rapor
+# /rapor komutu
+# ---------------------
+async def rapor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    if not await is_admin(update, context):
+        await update.message.reply_text("❌ Bu komutu sadece admin kullanabilir.")
+        return
+
+    args = context.args
+    if not args:
+        await update.message.reply_text("⚠️ Kullanıcı adı belirt: /rapor @kullanici")
+        return
+
+    username = args[0].lstrip("@")
+    # Kullanıcıyı bul
+    for data in daily_approvals.values():
+        if data["username"].lower() == username.lower():
+            await update.message.reply_text(
+                f"📊 {data['name']} – Bugün\nToplam Onay: {data['total']:,}"
+            )
+            return
+
+    await update.message.reply_text("⚠️ Bu kullanıcıya ait veri bulunamadı.")
+
+# ---------------------
+# Onay ve iptal mesajlarını yakala
 # ---------------------
 async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
-    if not message:
+    if not message or not message.text:
         return
-
-    text = message.text.lower()
 
     # Admin kontrolü
     if not await is_admin(update, context):
         return
 
-    # /rapor komutu
-    if text.startswith("/rapor"):
-        parts = text.split()
-        if len(parts) < 2:
-            await message.reply_text("Rapor almak için: /rapor KullaniciAdi")
-            return
-        target_name = parts[1]
-        for data in daily_approvals.values():
-            if data["name"].lower() == target_name.lower():
-                toplam = data["total"]
-                await message.reply_text(f"📊 {target_name} – Bugün\nToplam Onay: {toplam:,}")
-                return
-        await message.reply_text(f"{target_name} için kayıt bulunamadı.")
+    text = message.text.lower()
+
+    # Kara liste kontrolü
+    if any(word in text and "iptal" not in text for word in BLACKLIST):
         return
 
-    # Kara liste
-    for word in BLACKLIST:
-        if word in text and "iptal" not in text:
-            return
-
-    # Onay/iptal işlemi
+    # Sayı yakala
     match = re.search(r'(\d+)\s?k?', text)
     if not match:
         return
@@ -96,27 +97,29 @@ async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if amount <= 0:
         return
 
-    # Kullanıcı adını mesajdan alıyoruz (ör: Caner24 10k)
-    user_match = re.match(r'(\w+)', text)
-    if not user_match:
-        return
-    name = user_match.group(1)
-    uid = hash(name.lower())  # basit ID, gerçek Telegram ID değil ama toplama için yeterli
+    user = message.reply_to_message.from_user if message.reply_to_message else message.from_user
+    uid = user.id
+    name = user.first_name
+    username = user.username if user.username else name
 
     if uid not in daily_approvals:
-        daily_approvals[uid] = {"name": name, "total": 0}
+        daily_approvals[uid] = {"name": name, "username": username, "total": 0}
 
     # İptal
     if "iptal" in text:
         daily_approvals[uid]["total"] -= amount
         if daily_approvals[uid]["total"] < 0:
             daily_approvals[uid]["total"] = 0
-        await message.reply_text(f"↩️ {name} için {amount:,} geri alındı\n📊 Güncel toplam: {daily_approvals[uid]['total']:,}")
+        await message.reply_text(
+            f"↩️ {name} için {amount:,} geri alındı\n📊 Güncel toplam: {daily_approvals[uid]['total']:,}"
+        )
         return
 
     # Normal onay
     daily_approvals[uid]["total"] += amount
-    await message.reply_text(f"✅ {name} için {amount:,} onay kaydedildi\n📊 Bugünkü toplam: {daily_approvals[uid]['total']:,}")
+    await message.reply_text(
+        f"✅ {name} için {amount:,} onay kaydedildi\n📊 Bugünkü toplam: {daily_approvals[uid]['total']:,}"
+    )
 
 # ---------------------
 # Gün sonu mesajı
@@ -127,28 +130,38 @@ async def daily_message():
         next_run = now.replace(hour=23, minute=59, second=0, microsecond=0)
         if now >= next_run:
             next_run += timedelta(days=1)
+
         await asyncio.sleep((next_run - now).total_seconds())
 
         emojiler = random.choice(emoji_sets)
-        mesaj = f"<b>{emojiler} —GÜN SONU— {emojiler}</b>"
+        mesaj = f"<b>{emojiler} —GÜN SONU— {emojiler}</b>\n\n📊 <b>Günlük Özet</b>\n"
+        for data in daily_approvals.values():
+            mesaj += f"• {data['name']}: {data['total']:,}\n"
 
-        if daily_approvals:
-            mesaj += "\n\n📊 <b>Günlük Özet</b>\n"
-            for data in daily_approvals.values():
-                mesaj += f"• {data['name']}: {data['total']:,}\n"
+        # Tüm gruplarda gönder
+        # Eğer sadece tek grup istiyorsan CHAT_ID ekle
+        # await bot.send_message(chat_id=CHAT_ID, text=mesaj, parse_mode='HTML')
+        # Şimdilik örnek olarak sadece bir grup gönderecek
+        print("Gün sonu mesajı (test):")
+        print(mesaj)
 
-        print("[GÜN SONU] Mesaj gönderildi:\n", mesaj)
+        # Günlük verileri sıfırla
+        for key in daily_approvals:
+            daily_approvals[key]["total"] = 0
 
 # ---------------------
-# Başlatma
+# Botu başlat
 # ---------------------
-if __name__ == "__main__":
+async def main():
     app_bot = ApplicationBuilder().token(TOKEN).build()
-    app_bot.add_handler(CommandHandler("start", start))
-    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, approval_handler))
+    app_bot.add_handler(CommandHandler("rapor", rapor))
+    app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), approval_handler))
 
-    # Gün sonu görevini başlat
-    asyncio.get_event_loop().create_task(daily_message())
+    # Background görev
+    asyncio.create_task(daily_message())
 
-    # Polling başlat
-    app_bot.run_polling()
+    await app_bot.start()
+    await app_bot.updater.start_polling()
+    await app_bot.updater.idle()
+
+asyncio.run(main())

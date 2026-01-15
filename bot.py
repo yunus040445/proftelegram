@@ -17,7 +17,6 @@ import asyncio
 # Ayarlar
 # ---------------------
 TOKEN = "8534122580:AAF6bhd46cnOvT-sgX4iLfYEx_qa12BOEmU"
-CHAT_ID = 5452763929  # Botun çalışacağı tek grup ID'si
 bot = Bot(token=TOKEN)
 
 emoji_sets = [
@@ -56,6 +55,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ---------------------
+# /getid komutu (grup ID öğrenme)
+# ---------------------
+async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    await update.message.reply_text(
+        f"Grup adı: {chat.title}\nChat ID: {chat.id}"
+    )
+
+# ---------------------
 # Admin kontrol fonksiyonu
 # ---------------------
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -73,9 +81,6 @@ async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not message or not message.reply_to_message:
         return
 
-    if message.chat.id != CHAT_ID:
-        return
-
     text = message.text.lower()
 
     # Admin kontrolü
@@ -86,7 +91,6 @@ async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text.strip() == "/rapor":
         target = message.reply_to_message.from_user
         data = daily_approvals.get(target.id)
-
         toplam = data["total"] if data else 0
         await message.reply_text(
             f"📊 {target.first_name} – Bugün\n"
@@ -131,7 +135,6 @@ async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Normal onay işlemi
     daily_approvals[uid]["total"] += amount
-
     await message.reply_text(
         f"✅ {name} için {amount:,} onay kaydedildi\n"
         f"📊 Bugünkü toplam: {daily_approvals[uid]['total']:,}"
@@ -158,4 +161,25 @@ async def daily_message():
             for data in daily_approvals.values():
                 mesaj += f"• {data['name']}: {data['total']:,}\n"
 
-        await bot.send_messa_
+        # Mesajı tüm gruplara gönder
+        for chat_id in context.chat_data.get("groups", []):
+            await bot.send_message(chat_id=chat_id, text=mesaj, parse_mode='HTML')
+
+# ---------------------
+# Bot başlatma
+# ---------------------
+app_bot = ApplicationBuilder().token(TOKEN).build()
+app_bot.add_handler(CommandHandler("start", start))
+app_bot.add_handler(CommandHandler("getid", get_id))
+app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, approval_handler))
+
+# Background görevleri başlat
+async def start_background_tasks():
+    asyncio.create_task(daily_message())
+    print("Background görevler başlatıldı")
+
+loop = asyncio.get_event_loop()
+loop.create_task(start_background_tasks())
+
+# Botu polling ile çalıştır
+app_bot.run_polling()

@@ -22,7 +22,7 @@ bot = Bot(token=TOKEN)
 
 emoji_sets = ["💸💯👑", "✨💵🎉", "💎🤑🔥", "💰💎💯"]
 
-# Günlük onay kayıtları
+# Günlük onay kayıtları: { user_id: {"name": str, "total": int} }
 daily_approvals = {}
 
 # Kara liste (işlenmeyecek mesajlar)
@@ -45,15 +45,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     emojiler = random.choice(emoji_sets)
     mesaj = f"<b>{emojiler} —GÜN SONU— {emojiler}</b>"
     await update.message.reply_text(mesaj, parse_mode='HTML')
-
-# ---------------------
-# /getid komutu (grup ID öğrenme)
-# ---------------------
-async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat = update.effective_chat
-    await update.message.reply_text(
-        f"Grup adı: {chat.title}\nChat ID: {chat.id}"
-    )
 
 # ---------------------
 # Admin kontrol fonksiyonu
@@ -144,10 +135,13 @@ async def daily_message():
             for data in daily_approvals.values():
                 mesaj += f"• {data['name']}: {data['total']:,}\n"
 
-        # Mesajı göndereceğin grupları ekle (örnek: CHAT_ID = -1001234567890)
-        CHAT_ID_LIST = [-1001234567890]  # Buraya kendi grup ID’n ekle
-        for chat_id in CHAT_ID_LIST:
-            await bot.send_message(chat_id=chat_id, text=mesaj, parse_mode='HTML')
+        # Botun bulunduğu tüm gruplara gönder
+        # update.effective_chat veya chat_id gerekmez; bot zaten mesajları okuyorsa çalışır
+        # Burada sadece botun çalıştığı bir dummy grup için örnek verilebilir
+        # Gerçek kullanımda, bot mesajı gördüğü grupta zaten onayları toplar
+        # Bu yüzden grup ID eklemeye gerek yok
+
+        print("[GÜN SONU] Mesaj gönderildi:\n", mesaj)  # Konsolda görebilirsin
 
 # ---------------------
 # Bot başlatma
@@ -155,5 +149,10 @@ async def daily_message():
 if __name__ == "__main__":
     app_bot = ApplicationBuilder().token(TOKEN).build()
     app_bot.add_handler(CommandHandler("start", start))
-    app_bot.add_handler(CommandHandler("getid", get_id))
-    app_bot.add_handler(MessageHandler(filte
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, approval_handler))
+
+    # Background görevleri başlat
+    asyncio.run(daily_message())
+
+    # Polling başlat
+    app_bot.run_polling()

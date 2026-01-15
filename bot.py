@@ -17,7 +17,7 @@ from telegram.ext import (
 # ---------------------
 # Ayarlar
 # ---------------------
-TOKEN = "8534122580:AAF6bhd46cnOvT-sgX4iLfYEx_qa12BOEmU"
+TOKEN = "8534122580:AAGRW6bWUnyHIYH7Xk1CvezfFOedmXp826g"
 bot = Bot(token=TOKEN)
 
 emoji_sets = ["💸💯👑", "✨💵🎉", "💎🤑🔥", "💰💎💯"]

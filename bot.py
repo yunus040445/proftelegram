@@ -86,7 +86,7 @@ async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ {name} için {amount:,} onay kaydedildi\n📊 Bugünkü toplam: {daily_approvals[uid]['total']:,}"
     )
 
-# ---------------- GÜN SONU GÖREVİ (21:20) ----------------
+# ---------------- GÜN SONU GÖREVİ (21:25) ----------------
 async def gun_sonu_gorevi(app):
     global daily_approvals, last_chat_id
     tr_tz = timezone(timedelta(hours=3))

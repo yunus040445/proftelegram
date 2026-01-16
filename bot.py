@@ -9,22 +9,26 @@ TOKEN = "8534122580:AAGRW6bWUnyHIYH7Xk1CvezfFOedmXp826g"
 bot = Bot(token=TOKEN)
 
 daily_approvals = {}
-last_chat_id = None  # 🔥 SON AKTİF CHAT
+last_chat_id = None
 emoji_sets = ["💸💯👑", "✨💵🎉", "💎🤑🔥", "💰💎💯"]
 BLACKLIST = ["yat yok", "red", "onay yok", "yok"]
 
+# ---------------- ADMIN KONTROL ----------------
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     member = await context.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
     return member.status in ["administrator", "creator"]
 
+# ---------------- RAPOR ----------------
 async def rapor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("❌ Sadece admin kullanabilir.")
         return
+
     args = context.args
     if not args:
         await update.message.reply_text("⚠️ Kullanıcı adı gir: /rapor @kullanici")
         return
+
     username = args[0].lstrip("@")
     for data in daily_approvals.values():
         if data["username"].lower() == username.lower():
@@ -32,8 +36,10 @@ async def rapor(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📊 {data['name']} – Bugün\nToplam Onay: {data['total']:,}"
             )
             return
+
     await update.message.reply_text("⚠️ Bu kullanıcıya ait veri yok.")
 
+# ---------------- ONAY HANDLER ----------------
 async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global last_chat_id
     message = update.message
@@ -42,7 +48,7 @@ async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         return
 
-    last_chat_id = update.effective_chat.id  # 🔥 CHAT HAFIZAYA AL
+    last_chat_id = update.effective_chat.id
 
     text = message.text.lower()
     if any(word in text and "iptal" not in text for word in BLACKLIST):
@@ -80,15 +86,15 @@ async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ {name} için {amount:,} onay kaydedildi\n📊 Bugünkü toplam: {daily_approvals[uid]['total']:,}"
     )
 
-# 🔥 GÜN SONU TAKİBİ (GRUP ID YOK)
+# ---------------- GÜN SONU GÖREVİ (21:20) ----------------
 async def gun_sonu_gorevi(app):
     global daily_approvals, last_chat_id
-    tz = pytz.timezone("Europe/Istanbul")
+    tr_tz = timezone(timedelta(hours=3))
 
     while True:
-        now = datetime.now(tz)
+        now = datetime.now(tr_tz)
 
-        if now.hour == 21 and now.minute == 15:
+        if now.hour == 21 and now.minute == 20:
             if last_chat_id and daily_approvals:
                 emoji = random.choice(emoji_sets)
                 mesaj = f"📊 GÜN SONU RAPORU {emoji}\n\n"
@@ -100,24 +106,27 @@ async def gun_sonu_gorevi(app):
 
                 mesaj += f"\n💰 Genel Toplam: {toplam:,}"
 
-                await app.bot.send_message(
-                    chat_id=last_chat_id,
-                    text=mesaj
-                )
+                await app.bot.send_message(last_chat_id, mesaj)
 
-            # 🔥 SIFIRLAMA
             daily_approvals = {}
-
             await asyncio.sleep(60)
 
         await asyncio.sleep(20)
 
+# ---------------- BOT BAŞLAT ----------------
+async def post_init(app):
+    asyncio.create_task(gun_sonu_gorevi(app))
+
 def run_bot():
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = (
+        ApplicationBuilder()
+        .token(TOKEN)
+        .post_init(post_init)
+        .build()
+    )
+
     app.add_handler(CommandHandler("rapor", rapor))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), approval_handler))
-
-    app.job_queue.run_once(lambda _: asyncio.create_task(gun_sonu_gorevi(app)), 1)
 
     app.run_polling()
 

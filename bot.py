@@ -3,8 +3,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, Messa
 import asyncio
 import re
 import random
-from datetime import datetime
-import pytz
+from datetime import datetime, timedelta, timezone
 
 TOKEN = "8534122580:AAGRW6bWUnyHIYH7Xk1CvezfFOedmXp826g"
 bot = Bot(token=TOKEN)

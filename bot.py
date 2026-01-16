@@ -86,32 +86,37 @@ async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ {name} için {amount:,} onay kaydedildi\n📊 Bugünkü toplam: {daily_approvals[uid]['total']:,}"
     )
 
-# ---------------- GÜN SONU GÖREVİ (21:30) ----------------
+# ---------------- GÜN SONU GÖREVİ (22:00) ----------------
 async def gun_sonu_gorevi(app):
     global daily_approvals, last_chat_id
     tr_tz = timezone(timedelta(hours=3))
 
     while True:
         now = datetime.now(tr_tz)
+        # bir sonraki 21:20'yi hesapla
+        next_run = now.replace(hour=21, minute=20, second=0, microsecond=0)
+        if next_run <= now:
+            next_run += timedelta(days=1)  # eğer geçildiyse yarına al
 
-        if now.hour == 21 and now.minute == 20:
-            if last_chat_id and daily_approvals:
-                emoji = random.choice(emoji_sets)
-                mesaj = f"📊 GÜN SONU RAPORU {emoji}\n\n"
+        wait_seconds = (next_run - now).total_seconds()
+        await asyncio.sleep(wait_seconds)  # tam o saate kadar bekle
 
-                toplam = 0
-                for data in daily_approvals.values():
-                    mesaj += f"👤 {data['name']} → {data['total']:,}\n"
-                    toplam += data["total"]
+        # mesajı gönder
+        if last_chat_id and daily_approvals:
+            emoji = random.choice(emoji_sets)
+            mesaj = f"📊 GÜN SONU RAPORU {emoji}\n\n"
 
-                mesaj += f"\n💰 Genel Toplam: {toplam:,}"
+            toplam = 0
+            for data in daily_approvals.values():
+                mesaj += f"👤 {data['name']} → {data['total']:,}\n"
+                toplam += data["total"]
 
-                await app.bot.send_message(last_chat_id, mesaj)
+            mesaj += f"\n💰 Genel Toplam: {toplam:,}"
+            await app.bot.send_message(last_chat_id, mesaj)
 
-            daily_approvals = {}
-            await asyncio.sleep(60)
+        # günlük onayları sıfırla
+        daily_approvals = {}
 
-        await asyncio.sleep(20)
 
 # ---------------- BOT BAŞLAT ----------------
 async def post_init(app):
